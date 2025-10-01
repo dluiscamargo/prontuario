@@ -41,8 +41,8 @@ Siga os passos abaixo:
 Se você ainda não o fez, clone o projeto para a sua máquina local.
 
 ```bash
-git clone <URL_DO_SEU_REPOSITORIO>
-cd prontuario
+https://github.com/dluiscamargo/prontuario.git
+
 ```
 
 ### 2. Configurar Variáveis de Ambiente
