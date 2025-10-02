@@ -15,7 +15,22 @@ class PrescriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Prescription
         fields = '__all__'
-        read_only_fields = ('is_signed', 'signed_at')
+        read_only_fields = ('is_signed', 'signed_at', 'sncr_number')
+
+    def validate(self, data):
+        """
+        Valida que os dados do adquirente são fornecidos para receitas de controle especial.
+        """
+        prescription_type = data.get('prescription_type')
+        # Verifica se o tipo de prescrição não é o comum
+        if prescription_type and prescription_type != Prescription.PrescriptionType.COMUM:
+            acquirer_name = data.get('acquirer_name')
+            acquirer_document = data.get('acquirer_document')
+            if not acquirer_name or not acquirer_document:
+                raise serializers.ValidationError(
+                    "Para receitas de controle especial, o nome e o documento do adquirente são obrigatórios."
+                )
+        return data
 
 class ProcedureSerializer(serializers.ModelSerializer):
     signed_by = DoctorInfoSerializer(read_only=True)

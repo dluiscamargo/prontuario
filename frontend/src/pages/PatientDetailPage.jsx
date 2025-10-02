@@ -152,15 +152,29 @@ function PatientDetailPage() {
 
     const handleCloseModal = () => setModalOpen(false);
 
-    const handleFormSubmit = async (description) => {
+    const handleFormSubmit = async (formData) => {
         const url = modalConfig.type === 'prescription' ? '/api/prescriptions/' : '/api/procedures/';
-        const payload = { description, medical_record: modalConfig.recordId };
+        // O payload agora inclui a descrição e os dados extras da receita
+        const payload = { ...formData, medical_record: modalConfig.recordId };
         try {
             await apiClient.post(url, payload);
             enqueueSnackbar(`${modalConfig.type === 'prescription' ? 'Receita' : 'Procedimento'} adicionado com sucesso.`, { variant: 'success' });
             fetchPatient();
         } catch (error) {
-            enqueueSnackbar(`Falha ao adicionar ${modalConfig.type}.`, { variant: 'error' });
+            // Lógica para extrair e mostrar a mensagem de erro da API
+            const errorData = error.response?.data;
+            let errorMessage = `Falha ao adicionar ${modalConfig.type}.`;
+            if (errorData) {
+                // Pega a primeira chave de erro (ex: 'non_field_errors')
+                const errorKey = Object.keys(errorData)[0];
+                const errorMessages = errorData[errorKey];
+                if (Array.isArray(errorMessages) && errorMessages.length > 0) {
+                    errorMessage = errorMessages[0];
+                } else {
+                    errorMessage = JSON.stringify(errorData);
+                }
+            }
+            enqueueSnackbar(errorMessage, { variant: 'error' });
             console.error(`Failed to add ${modalConfig.type}`, error);
         }
     };
@@ -287,6 +301,7 @@ function PatientDetailPage() {
                 handleClose={handleCloseModal}
                 handleSubmit={handleFormSubmit}
                 title={modalConfig.title}
+                type={modalConfig.type}
             />
             <SigningInstructionsModal 
                 open={instructionsModalOpen}

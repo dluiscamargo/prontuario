@@ -34,8 +34,25 @@ class MedicalRecord(models.Model):
         return f"Prontuário de {self.patient} - {self.created_at.strftime('%d/%m/%Y')}"
 
 class Prescription(models.Model):
+    class PrescriptionType(models.TextChoices):
+        COMUM = "COMUM", "Comum"
+        A1_AMARELA = "A1_AMARELA", "Notificação de Receita A1 (Amarela)"
+        B1_AZUL = "B1_AZUL", "Notificação de Receita B1 (Azul)"
+        B2_AZUL = "B2_AZUL", "Notificação de Receita B2 (Azul)"
+        C1_BRANCA = "C1_BRANCA", "Receita de Controle Especial (Branca - Duas Vias)"
+        C2_BRANCA = "C2_BRANCA", "Receita de Controle Especial (Branca - Retinoides)"
+        ANTIMICROBIANO = "ANTIMICROBIANO", "Receita de Antimicrobiano (Branca - Duas Vias)"
+
     medical_record = models.ForeignKey(MedicalRecord, related_name='prescriptions', on_delete=models.CASCADE)
     description = models.TextField()
+    prescription_type = models.CharField(
+        max_length=50,
+        choices=PrescriptionType.choices,
+        default=PrescriptionType.COMUM
+    )
+    sncr_number = models.CharField(max_length=20, blank=True, null=True, unique=True, help_text="Numeração oficial gerada pelo SNCR para receitas controladas.")
+    acquirer_name = models.CharField(max_length=255, blank=True, null=True, help_text="Nome completo do comprador/adquirente do medicamento.")
+    acquirer_document = models.CharField(max_length=50, blank=True, null=True, help_text="Documento de identificação do comprador/adquirente.")
     created_at = models.DateTimeField(auto_now_add=True)
     is_signed = models.BooleanField(default=False)
     signed_at = models.DateTimeField(null=True, blank=True)

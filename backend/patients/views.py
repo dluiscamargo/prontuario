@@ -23,6 +23,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.exceptions import InvalidSignature
 import base64
+from .sncr_service import get_sncr_number
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +150,27 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
     serializer_class = PrescriptionSerializer
     permission_classes = [permissions.IsAuthenticated, IsDoctorOwner]
 
+    def perform_create(self, serializer):
+        """
+        Salva a prescrição e, se for de controle especial, solicita a numeração ao SNCR.
+        """
+        prescription_type = serializer.validated_data.get('prescription_type')
+        
+        if prescription_type and prescription_type != Prescription.PrescriptionType.COMUM:
+            # Em um cenário real, montaríamos um payload mais robusto
+            # com dados do médico, paciente, etc.
+            prescription_data_for_sncr = {
+                "doctor_crm": self.request.user.crm,
+                "patient_cpf": serializer.validated_data.get('medical_record').patient.cpf,
+                "description": serializer.validated_data.get('description')
+            }
+            sncr_number = get_sncr_number(prescription_data_for_sncr)
+            # Salva a instância da prescrição com o número obtido
+            serializer.save(sncr_number=sncr_number)
+        else:
+            # Salva a prescrição comum sem número SNCR
+            serializer.save()
+
     def get_queryset(self):
         user = self.request.user
         if user.role == 'MEDICO':
@@ -215,17 +237,55 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
         p = canvas.Canvas(buffer, pagesize=letter)
         width, height = letter
 
-        p.drawString(100, height - 100, f"Paciente: {prescription.medical_record.patient.user.get_full_name()}")
-        p.drawString(100, height - 120, f"Médico Responsável: {request.user.get_full_name()} (CRM: {request.user.crm})")
-        p.drawString(100, height - 140, f"Data da Emissão: {timezone.now().strftime('%d/%m/%Y %H:%M')}")
-        p.drawString(100, height - 200, "Receita:")
-        p.drawString(120, height - 220, prescription.description)
+        # Título do Documento
+        p.setFont("Helvetica-Bold", 16)
+        p.drawString(100, height - 60, "Receituário Médico")
         
+        # Linha separadora
+        p.line(100, height - 70, width - 100, height - 70)
+
+        # Informações do Paciente e Médico
+        p.setFont("Helvetica", 12)
+        p.drawString(100, height - 100, f"Paciente: {prescription.medical_record.patient.user.get_full_name()}")
+        p.drawString(100, height - 120, f"Médico: {prescription.signed_by.get_full_name() if prescription.signed_by else request.user.get_full_name()} (CRM: {prescription.signed_by.crm if prescription.signed_by else request.user.crm})")
+        p.drawString(100, height - 140, f"Data de Emissão: {timezone.now().strftime('%d/%m/%Y')}")
+
+        # Informações da Receita Controlada (se aplicável)
+        if prescription.prescription_type != Prescription.PrescriptionType.COMUM:
+            p.setFont("Helvetica-Bold", 12)
+            p.drawString(100, height - 170, f"Tipo: {prescription.get_prescription_type_display()}")
+            if prescription.sncr_number:
+                p.drawString(100, height - 190, f"Numeração SNCR: {prescription.sncr_number}")
+            
+            p.setFont("Helvetica", 12)
+            p.drawString(100, height - 220, "Adquirente:")
+            p.drawString(120, height - 240, f"Nome: {prescription.acquirer_name or '____________________________'}")
+            p.drawString(120, height - 260, f"Documento: {prescription.acquirer_document or '____________________________'}")
+
+        # Descrição da Prescrição
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(100, height - 300, "Prescrição:")
+        p.setFont("Helvetica", 12)
+        # Lógica simples para quebrar a linha (pode ser melhorada)
+        from reportlab.lib.utils import simpleSplit
+        lines = simpleSplit(prescription.description, 'Helvetica', 12, width - 200)
+        y = height - 320
+        for line in lines:
+            p.drawString(120, y, line)
+            y -= 15
+
+        # Assinatura (espaço para assinatura digital/física)
+        if prescription.is_signed and prescription.signed_at:
+             p.drawString(100, 100, f"Documento assinado digitalmente por {prescription.signed_by.get_full_name()} em {prescription.signed_at.strftime('%d/%m/%Y %H:%M')}")
+        else:
+             p.drawString(100, 100, "_________________________")
+             p.drawString(100, 85, "Assinatura do Médico")
+
         p.showPage()
         p.save()
 
         buffer.seek(0)
-        return FileResponse(buffer, as_attachment=True, filename=f'receita_nao_assinada_{prescription.id}.pdf')
+        return FileResponse(buffer, as_attachment=True, filename=f'receita_{prescription.id}.pdf')
     
     @action(detail=True, methods=['get'])
     def download_signed_document(self, request, pk=None):
