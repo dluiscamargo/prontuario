@@ -31,7 +31,20 @@ function DoctorSignUpPage() {
             enqueueSnackbar('Cadastro realizado com sucesso! Faça o login.', { variant: 'success' });
             navigate('/login');
         } catch (err) {
-            enqueueSnackbar('Falha no cadastro. Verifique os dados e tente novamente.', { variant: 'error' });
+            const errorData = err.response?.data;
+            let errorMessage = 'Falha no cadastro. Verifique os dados e tente novamente.';
+
+            if (errorData) {
+                const errorKey = Object.keys(errorData)[0];
+                const errorMsg = errorData[errorKey];
+
+                if (Array.isArray(errorMsg)) {
+                    errorMessage = `${errorKey}: ${errorMsg[0]}`;
+                } else {
+                    errorMessage = errorMsg.detail || JSON.stringify(errorData);
+                }
+            }
+            enqueueSnackbar(errorMessage, { variant: 'error' });
         }
     };
 

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Patient, Address, MedicalRecord, Prescription, Procedure
-from users.serializers import UserSerializer
+from users.serializers import UserSerializer, DoctorInfoSerializer
 from users.models import User
 
 class AddressSerializer(serializers.ModelSerializer):
@@ -10,16 +10,20 @@ class AddressSerializer(serializers.ModelSerializer):
         exclude = ('patient',)
 
 class PrescriptionSerializer(serializers.ModelSerializer):
+    signed_by = DoctorInfoSerializer(read_only=True)
+
     class Meta:
         model = Prescription
         fields = '__all__'
-        read_only_fields = ('is_signed', 'signed_at', 'signed_by')
+        read_only_fields = ('is_signed', 'signed_at')
 
 class ProcedureSerializer(serializers.ModelSerializer):
+    signed_by = DoctorInfoSerializer(read_only=True)
+    
     class Meta:
         model = Procedure
         fields = '__all__'
-        read_only_fields = ('is_signed', 'signed_at', 'signed_by')
+        read_only_fields = ('is_signed', 'signed_at')
 
 class MedicalRecordSerializer(serializers.ModelSerializer):
     prescriptions = PrescriptionSerializer(many=True, read_only=True)
@@ -39,12 +43,18 @@ class PatientSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'doctor', 'cpf', 'phone', 'address', 'medical_records']
         read_only_fields = ('doctor',)
 
+    def __init__(self, *args, **kwargs):
+        super(PatientSerializer, self).__init__(*args, **kwargs)
+        # Para operações de atualização, torna o username do usuário aninhado somente leitura
+        if self.instance:
+            self.fields['user'].fields['username'].read_only = True
+
     def create(self, validated_data):
         user_data = validated_data.pop('user')
         address_data = validated_data.pop('address')
         
-        # Delega a criação do usuário para o UserSerializer, que já lida com a criptografia
-        user = UserSerializer().create(validated_data=user_data)
+        # Corrigido: chama o método create do serializer de forma correta
+        user = UserSerializer().create(user_data)
         
         # Cria o paciente associado ao usuário
         patient = Patient.objects.create(user=user, **validated_data)
@@ -55,23 +65,27 @@ class PatientSerializer(serializers.ModelSerializer):
         return patient
 
     def update(self, instance, validated_data):
-        user_data = validated_data.pop('user', {})
-        address_data = validated_data.pop('address', {})
+        user_data = validated_data.pop('user', None)
+        address_data = validated_data.pop('address', None)
 
-        # Atualiza o usuário
-        user_serializer = UserSerializer(instance.user, data=user_data, partial=True)
-        user_serializer.is_valid(raise_exception=True)
-        user_serializer.save()
+        # Atualiza o usuário, se houver dados
+        if user_data:
+            user = instance.user
+            # Impede a alteração do nome de usuário para evitar conflitos de unicidade
+            user_data.pop('username', None)
+            user_serializer = UserSerializer(user, data=user_data, partial=True)
+            user_serializer.is_valid(raise_exception=True)
+            user_serializer.save()
 
-        # Atualiza o endereço
-        if instance.address:
-            address_serializer = AddressSerializer(instance.address, data=address_data, partial=True)
-            address_serializer.is_valid(raise_exception=True)
-            address_serializer.save()
+        # Atualiza o endereço, se houver dados
+        if address_data:
+            if hasattr(instance, 'address') and instance.address:
+                address_serializer = AddressSerializer(instance.address, data=address_data, partial=True)
+                address_serializer.is_valid(raise_exception=True)
+                address_serializer.save()
+            else:
+                # Cria um novo endereço se não existir
+                Address.objects.create(patient=instance, **address_data)
         
-        # Atualiza o paciente
-        instance.cpf = validated_data.get('cpf', instance.cpf)
-        instance.phone = validated_data.get('phone', instance.phone)
-        instance.save()
-        
-        return instance
+        # Atualiza os campos do paciente usando o super() para manter o comportamento padrão
+        return super().update(instance, validated_data)

@@ -215,12 +215,6 @@ function PatientDetailPage() {
                 </CardContent>
             </Card>
 
-            {patient.address.latitude && patient.address.longitude && (
-                <Box marginTop={2}>
-                    <MapView lat={patient.address.latitude} lon={patient.address.longitude} />
-                </Box>
-            )}
-
             <Box marginTop={4}>
                 <Typography variant="h5" component="h2" gutterBottom>Prontuário</Typography>
                 <Button onClick={createNewMedicalRecord} variant="contained" style={{ marginBottom: '1rem' }}>
@@ -238,7 +232,11 @@ function PatientDetailPage() {
                                     <ListItem key={p.id} sx={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                                         <ListItemText 
                                             primary={p.description} 
-                                            secondary={p.is_signed ? `Assinado em ${new Date(p.signed_at).toLocaleString()}` : 'Aguardando assinatura'}
+                                            secondary={
+                                                p.is_signed 
+                                                ? `Assinado por ${p.signed_by?.full_name || 'Médico não identificado'} (CRM: ${p.signed_by?.crm || 'N/A'}) em ${new Date(p.signed_at).toLocaleString()}` 
+                                                : 'Aguardando assinatura'
+                                            }
                                         />
                                         {p.is_signed ? (
                                             <Button size="small" onClick={() => handleDownloadSigned('prescription', p.id)}>Baixar PDF Assinado</Button>
@@ -258,7 +256,11 @@ function PatientDetailPage() {
                                     <ListItem key={p.id} sx={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                                         <ListItemText 
                                             primary={p.description} 
-                                            secondary={p.is_signed ? `Assinado em ${new Date(p.signed_at).toLocaleString()}` : 'Aguardando assinatura'}
+                                            secondary={
+                                                p.is_signed 
+                                                ? `Assinado por ${p.signed_by?.full_name || 'Médico não identificado'} (CRM: ${p.signed_by?.crm || 'N/A'}) em ${new Date(p.signed_at).toLocaleString()}` 
+                                                : 'Aguardando assinatura'
+                                            }
                                         />
                                         {p.is_signed ? (
                                             <Button size="small" onClick={() => handleDownloadSigned('procedure', p.id)}>Baixar PDF Assinado</Button>
@@ -273,6 +275,13 @@ function PatientDetailPage() {
                     </Card>
                 ))}
             </Box>
+
+            {patient.address.latitude && patient.address.longitude && (
+                <Box marginTop={2}>
+                    <MapView lat={patient.address.latitude} lon={patient.address.longitude} />
+                </Box>
+            )}
+
             <RecordFormModal 
                 open={modalOpen}
                 handleClose={handleCloseModal}

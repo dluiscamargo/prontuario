@@ -26,6 +26,52 @@ import base64
 
 logger = logging.getLogger(__name__)
 
+class PatientDocumentsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != 'PACIENTE':
+            return Response({'detail': 'Apenas pacientes podem acessar esta página.'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            patient = Patient.objects.get(user=request.user)
+        except Patient.DoesNotExist:
+            return Response({'detail': 'Paciente não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        prescriptions = Prescription.objects.filter(medical_record__patient=patient, is_signed=True)
+        procedures = Procedure.objects.filter(medical_record__patient=patient, is_signed=True)
+
+        documents = []
+        for p in prescriptions:
+            documents.append({
+                'id': p.id,
+                'type': 'Receita',
+                'description': p.description,
+                'signed_at': p.signed_at,
+                'signed_document': request.build_absolute_uri(p.signed_document.url) if p.signed_document else None,
+                'doctor_name': p.signed_by.get_full_name() if p.signed_by else 'N/A',
+                'doctor_crm': p.signed_by.crm if p.signed_by else 'N/A'
+            })
+        
+        for p in procedures:
+            documents.append({
+                'id': p.id,
+                'type': 'Procedimento',
+                'description': p.description,
+                'signed_at': p.signed_at,
+                'signed_document': request.build_absolute_uri(p.signed_document.url) if p.signed_document else None,
+                'doctor_name': p.signed_by.get_full_name() if p.signed_by else 'N/A',
+                'doctor_crm': p.signed_by.crm if p.signed_by else 'N/A'
+            })
+        
+        patient_data = PatientSerializer(patient).data
+
+        return Response({
+            'patient': patient_data,
+            'documents': sorted(documents, key=lambda x: x['signed_at'], reverse=True)
+        })
+
+
 class IsDoctor(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'MEDICO'
@@ -52,6 +98,9 @@ class PatientViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
 
     def get_queryset(self):
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            return Patient.objects.filter(user_id=user_id)
         return Patient.objects.filter(doctor=self.request.user)
 
     def create(self, request, *args, **kwargs):

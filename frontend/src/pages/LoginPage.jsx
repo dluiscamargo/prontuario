@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import apiClient from '../services/api';
 import { TextField, Button, Container, Typography } from '@mui/material';
 import { useSnackbar } from 'notistack';
+import taonmedIcon from '../assets/icone_taonmed.png';
 
 function LoginPage() {
   const [username, setUsername] = useState('');
@@ -10,24 +11,33 @@ function LoginPage() {
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleLogin = async (event) => {
+    event.preventDefault();
     try {
       const response = await apiClient.post('/api/api-token-auth/', { username, password });
       localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user_role', response.data.role);
+      localStorage.setItem('user_full_name', response.data.full_name);
+
       enqueueSnackbar('Login bem-sucedido!', { variant: 'success' });
-      navigate('/');
-    } catch (err) {
+
+      if (response.data.role === 'MEDICO') {
+        navigate('/');
+      } else if (response.data.role === 'PACIENTE') {
+        navigate('/my-documents');
+      }
+    } catch (error) {
+      console.error('Login failed', error);
       enqueueSnackbar('Falha no login. Verifique suas credenciais.', { variant: 'error' });
     }
   };
 
   return (
     <Container maxWidth="xs">
-      <Typography variant="h4" component="h1" gutterBottom>
-        Login
-      </Typography>
-      <form onSubmit={handleSubmit}>
+      <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+        <img src={taonmedIcon} alt="Login Icon" style={{ height: '80px' }} />
+      </div>
+      <form onSubmit={handleLogin}>
         <TextField
           label="Usuário"
           variant="outlined"

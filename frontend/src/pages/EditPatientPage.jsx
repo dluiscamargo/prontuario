@@ -30,8 +30,13 @@ function EditPatientPage() {
             enqueueSnackbar('Paciente atualizado com sucesso!', { variant: 'success' });
             navigate(`/patient/${id}`);
         } catch (error) {
-            enqueueSnackbar('Erro ao atualizar paciente.', { variant: 'error' });
             console.error("Failed to update patient", error);
+            let errorMessage = 'Erro ao atualizar paciente.';
+            if (error.response && error.response.data) {
+                // Exibe o erro bruto do servidor para depuração.
+                errorMessage = JSON.stringify(error.response.data);
+            }
+            enqueueSnackbar(errorMessage, { variant: 'error' });
         }
     };
 
