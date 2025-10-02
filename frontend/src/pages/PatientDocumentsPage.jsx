@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import Header from '../components/AppBar';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 
 const StyledTableRow = styled(TableRow, {
   shouldForwardProp: prop => prop !== 'selected',
@@ -37,6 +38,7 @@ const StyledTableRow = styled(TableRow, {
 function PatientDocumentsPage() {
   const [documents, setDocuments] = useState([]);
   const [patient, setPatient] = useState(null);
+  const [patientPhone, setPatientPhone] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedDocId, setSelectedDocId] = useState(null);
 
@@ -52,6 +54,7 @@ function PatientDocumentsPage() {
         setLoading(true);
         const response = await apiClient.get('/api/patient-documents/');
         setPatient(response.data.patient);
+        setPatientPhone(response.data.patient.phone);
         setDocuments(response.data.documents);
       } catch (error) {
         console.error('Failed to fetch documents', error);
@@ -62,6 +65,15 @@ function PatientDocumentsPage() {
 
     fetchDocuments();
   }, []);
+
+  const handleShareOnWhatsApp = (docUrl, patientPhone) => {
+    const formattedPhone = `55${patientPhone.replace(/\D/g, '')}`;
+    const message = encodeURIComponent(
+      `Olá! Segue o link para o seu documento: ${docUrl}`,
+    );
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${message}`;
+    window.open(whatsappUrl, '_blank');
+  };
 
   if (loading) {
     return <CircularProgress />;
@@ -116,14 +128,26 @@ function PatientDocumentsPage() {
                 <TableCell>{`${doc.doctor_name} (CRM: ${doc.doctor_crm})`}</TableCell>
                 <TableCell>
                   {doc.signed_document && (
-                    <Button
-                      variant="contained"
-                      href={doc.signed_document}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Baixar
-                    </Button>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Button
+                        variant="contained"
+                        href={doc.signed_document}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Baixar
+                      </Button>
+                      <WhatsAppIcon
+                        color="success"
+                        sx={{ cursor: 'pointer' }}
+                        onClick={() =>
+                          handleShareOnWhatsApp(
+                            doc.signed_document,
+                            patientPhone,
+                          )
+                        }
+                      />
+                    </Box>
                   )}
                 </TableCell>
               </StyledTableRow>
