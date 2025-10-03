@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -11,6 +11,7 @@ import AddPatientPage from './pages/AddPatientPage';
 import EditPatientPage from './pages/EditPatientPage';
 import DoctorSignUpPage from './pages/DoctorSignUpPage';
 import PatientDocumentsPage from './pages/PatientDocumentsPage';
+import SncrManagementPage from './pages/SncrManagementPage';
 import { SnackbarProvider } from 'notistack';
 import SuccessSnackbar from './components/SuccessSnackbar';
 
@@ -111,6 +112,14 @@ function App() {
               element={
                 <PrivateRoute>
                   <PatientDocumentsPage />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/sncr-management" 
+              element={
+                <PrivateRoute>
+                  <SncrManagementPage />
                 </PrivateRoute>
               } 
             />

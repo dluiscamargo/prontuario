@@ -7,6 +7,7 @@ from .views import (
     ProcedureViewSet,
     ViaCepView,
     PatientDocumentsView,
+    SncrNumberViewSet,
 )
 
 router = DefaultRouter()
@@ -14,6 +15,7 @@ router.register(r'patients', PatientViewSet, basename='patient')
 router.register(r'medical-records', MedicalRecordViewSet, basename='medicalrecord')
 router.register(r'prescriptions', PrescriptionViewSet, basename='prescription')
 router.register(r'procedures', ProcedureViewSet, basename='procedure')
+router.register(r'sncr-numbers', SncrNumberViewSet, basename='sncrnumber')
 
 urlpatterns = [
     path('', include(router.urls)),

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -7,12 +7,20 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  ListItemIcon,
+  Box,
 } from '@mui/material';
-import { AccountCircle } from '@mui/icons-material';
+import MenuIcon from '@mui/icons-material/Menu';
+import AccountCircle from '@mui/icons-material/AccountCircle';
+import MedicalInformationIcon from '@mui/icons-material/MedicalInformation';
+import ArticleIcon from '@mui/icons-material/Article';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import LogoutIcon from '@mui/icons-material/Logout';
 import { Link, useNavigate } from 'react-router-dom';
 import taonmedIcon from '../assets/icone_taonmed.png';
+import apiClient from '../services/api';
 
-function CustomAppBar() {
+const CustomAppBar = () => {
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
   const userRole = localStorage.getItem('user_role');
@@ -43,35 +51,34 @@ function CustomAppBar() {
         </Typography>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <Typography sx={{ mr: 2 }}>{userFullName}</Typography>
-          <IconButton
-            size="large"
-            aria-label="account of current user"
-            aria-controls="menu-appbar"
-            aria-haspopup="true"
-            onClick={handleMenu}
-            color="inherit"
-          >
-            <AccountCircle />
-          </IconButton>
-          <Menu
-            id="menu-appbar"
-            anchorEl={anchorEl}
-            anchorOrigin={{
-              vertical: 'top',
-              horizontal: 'right',
-            }}
-            keepMounted
-            transformOrigin={{
-              vertical: 'top',
-              horizontal: 'right',
-            }}
-            open={Boolean(anchorEl)}
-            onClose={handleClose}
-          >
-            <MenuItem onClick={handleClose}>Profile</MenuItem>
-            <MenuItem onClick={handleClose}>My account</MenuItem>
-            <MenuItem onClick={handleLogout}>Logout</MenuItem>
-          </Menu>
+          <div>
+            <IconButton onClick={handleMenu} color="inherit">
+              <AccountCircle />
+            </IconButton>
+            <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleClose}>
+              {userRole === 'MEDICO' && (
+                <MenuItem component={Link} to="/patient-list" onClick={handleClose}>
+                  <ListItemIcon><MedicalInformationIcon fontSize="small" /></ListItemIcon>
+                  Meus Pacientes
+                </MenuItem>
+              )}
+              {userRole === 'MEDICO' && (
+                <MenuItem component={Link} to="/sncr-management" onClick={handleClose}>
+                  <ListItemIcon><VpnKeyIcon fontSize="small" /></ListItemIcon>
+                  Gerenciar Números SNCR
+                </MenuItem>
+              )}
+              {userRole === 'PACIENTE' && (
+                <MenuItem component={Link} to="/my-documents" onClick={handleClose}>
+                  <ListItemIcon><ArticleIcon fontSize="small" /></ListItemIcon>
+                  Meus Documentos
+                </MenuItem>
+              )}
+              <MenuItem onClick={handleClose}>Profile</MenuItem>
+              <MenuItem onClick={handleClose}>My account</MenuItem>
+              <MenuItem onClick={handleLogout}>Logout</MenuItem>
+            </Menu>
+          </div>
         </div>
       </Toolbar>
     </AppBar>

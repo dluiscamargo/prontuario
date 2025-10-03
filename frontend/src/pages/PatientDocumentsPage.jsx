@@ -35,6 +35,12 @@ const StyledTableRow = styled(TableRow, {
   }),
 }));
 
+const StyledHeaderCell = styled(TableCell)(({ theme }) => ({
+  backgroundColor: theme.palette.primary.main,
+  color: theme.palette.common.white,
+  fontWeight: 'bold',
+}));
+
 function PatientDocumentsPage() {
   const [documents, setDocuments] = useState([]);
   const [patient, setPatient] = useState(null);
@@ -106,11 +112,12 @@ function PatientDocumentsPage() {
         <Table sx={{ minWidth: 650 }} aria-label="simple table">
           <TableHead>
             <TableRow>
-              <TableCell>Tipo</TableCell>
-              <TableCell>Descrição</TableCell>
-              <TableCell>Data da Assinatura</TableCell>
-              <TableCell>Médico</TableCell>
-              <TableCell>Ações</TableCell>
+              <StyledHeaderCell>Tipo</StyledHeaderCell>
+              <StyledHeaderCell>Natureza</StyledHeaderCell>
+              <StyledHeaderCell>Descrição</StyledHeaderCell>
+              <StyledHeaderCell>Assinatura</StyledHeaderCell>
+              <StyledHeaderCell>Médico</StyledHeaderCell>
+              <StyledHeaderCell>Ações</StyledHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -121,6 +128,7 @@ function PatientDocumentsPage() {
                 onClick={() => handleRowClick(`${doc.type}-${doc.id}`)}
               >
                 <TableCell>{doc.type}</TableCell>
+                <TableCell>{doc.nature}</TableCell>
                 <TableCell>{doc.description}</TableCell>
                 <TableCell>
                   {new Date(doc.signed_at).toLocaleDateString()}

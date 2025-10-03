@@ -29,7 +29,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', '0').lower() in ['true', 't', '1']
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 
 # Application definition
@@ -131,17 +131,45 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# --- SNCR Integration Settings ---
+# Endpoint da API do SNCR (deve vir de variável de ambiente)
+SNCR_ENDPOINT = os.getenv("SNCR_ENDPOINT", "https://api.sncr.gov.br/receita/registrar")
+
+# Timeout padrão para as chamadas à API
+SNCR_TIMEOUT = int(os.getenv("SNCR_TIMEOUT", 30))
+
+# Caminhos para os certificados PEM (montados via Docker Secrets ou similar)
+SNCR_CERT_PEM_PATH = os.getenv("SNCR_CERT_PEM_PATH", "/run/secrets/sncr_cert.pem")
+SNCR_KEY_PEM_PATH = os.getenv("SNCR_KEY_PEM_PATH", "/run/secrets/sncr_key.pem")
+
+# Verificação do SSL (em produção, deve ser True ou o caminho para o CA Bundle)
+SNCR_VERIFY_SSL = os.getenv("SNCR_VERIFY_SSL", "True").lower() in ('true', '1', 't')
+
+
+# --- Celery Settings ---
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/0")
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'America/Sao_Paulo'
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],

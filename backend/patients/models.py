@@ -62,6 +62,33 @@ class Prescription(models.Model):
     def __str__(self):
         return f"Prescription for {self.medical_record.patient.user.username} at {self.created_at}"
 
+
+class SncrNumber(models.Model):
+    """
+    Armazena e gerencia os números de receita controlada obtidos da Vigilância Sanitária.
+    """
+    class Status(models.TextChoices):
+        DISPONIVEL = "DISPONIVEL", "Disponível"
+        UTILIZADO = "UTILIZADO", "Utilizado"
+        CANCELADO = "CANCELADO", "Cancelado"
+
+    # Reutilizando a definição de PrescriptionType para manter a consistência
+    prescription_type = models.CharField(
+        max_length=50,
+        choices=Prescription.PrescriptionType.choices,
+        help_text="Tipo de receita a que este número se destina."
+    )
+    number = models.CharField(max_length=50, unique=True, help_text="Numeração oficial fornecida pela Vigilância Sanitária.")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DISPONIVEL)
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='sncr_numbers', help_text="Médico a quem este número foi designado.")
+    prescription = models.OneToOneField('Prescription', on_delete=models.SET_NULL, null=True, blank=True, related_name='used_sncr_number')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.number} ({self.status})"
+
+
 class Procedure(models.Model):
     medical_record = models.ForeignKey(MedicalRecord, related_name='procedures', on_delete=models.CASCADE)
     description = models.TextField()

@@ -1,7 +1,11 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
+from rest_framework import serializers
 from .models import Patient, MedicalRecord, Prescription, Procedure
-from .serializers import PatientSerializer, MedicalRecordSerializer, PrescriptionSerializer, ProcedureSerializer
+from .serializers import (
+    PatientSerializer, MedicalRecordSerializer, 
+    PrescriptionSerializer, ProcedureSerializer, SncrNumberSerializer
+)
 from .geolocation import get_coordinates_for_patient
 from rest_framework.views import APIView
 import requests
@@ -11,6 +15,7 @@ import io
 from django.http import FileResponse, HttpResponseBadRequest, HttpResponse
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
 from django.utils import timezone
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -23,7 +28,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.exceptions import InvalidSignature
 import base64
-from .sncr_service import get_sncr_number
+from .models import SncrNumber
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +50,14 @@ class PatientDocumentsView(APIView):
 
         documents = []
         for p in prescriptions:
+            nature = p.get_prescription_type_display()
+            if p.sncr_number:
+                nature += f" (Nº SNCR: {p.sncr_number})"
+            
             documents.append({
                 'id': p.id,
                 'type': 'Receita',
+                'nature': nature,
                 'description': p.description,
                 'signed_at': p.signed_at,
                 'signed_document': request.build_absolute_uri(p.signed_document.url) if p.signed_document else None,
@@ -58,6 +69,7 @@ class PatientDocumentsView(APIView):
             documents.append({
                 'id': p.id,
                 'type': 'Procedimento',
+                'nature': 'Exame/Procedimento',
                 'description': p.description,
                 'signed_at': p.signed_at,
                 'signed_document': request.build_absolute_uri(p.signed_document.url) if p.signed_document else None,
@@ -152,21 +164,35 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """
-        Salva a prescrição e, se for de controle especial, solicita a numeração ao SNCR.
+        Salva a prescrição. Se for de controle especial, busca um número SNCR
+        disponível no banco de dados e o associa à receita.
         """
         prescription_type = serializer.validated_data.get('prescription_type')
         
         if prescription_type and prescription_type != Prescription.PrescriptionType.COMUM:
-            # Em um cenário real, montaríamos um payload mais robusto
-            # com dados do médico, paciente, etc.
-            prescription_data_for_sncr = {
-                "doctor_crm": self.request.user.crm,
-                "patient_cpf": serializer.validated_data.get('medical_record').patient.cpf,
-                "description": serializer.validated_data.get('description')
-            }
-            sncr_number = get_sncr_number(prescription_data_for_sncr)
-            # Salva a instância da prescrição com o número obtido
-            serializer.save(sncr_number=sncr_number)
+            # Encontra um número SNCR disponível para o médico logado
+            with transaction.atomic():
+                sncr_num_obj = SncrNumber.objects.select_for_update().filter(
+                    assigned_to=self.request.user,
+                    status=SncrNumber.Status.DISPONIVEL,
+                    prescription_type=prescription_type
+                ).first()
+
+                if not sncr_num_obj:
+                    error_message = f"Não há números de receita do tipo '{Prescription(prescription_type=prescription_type).get_prescription_type_display()}' disponíveis."
+                    raise serializers.ValidationError({
+                        'non_field_errors': [error_message]
+                    })
+
+                # Salva a prescrição e associa o número
+                prescription = serializer.save()
+                prescription.sncr_number = sncr_num_obj.number
+                prescription.save()
+                
+                # Marca o número como utilizado e o associa à prescrição
+                sncr_num_obj.status = SncrNumber.Status.UTILIZADO
+                sncr_num_obj.prescription = prescription
+                sncr_num_obj.save()
         else:
             # Salva a prescrição comum sem número SNCR
             serializer.save()
@@ -229,6 +255,36 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
             return Response({'detail': f'Erro ao processar o PDF assinado: {e}'}, status=status.HTTP_400_BAD_REQUEST)
 
 
+    def _draw_prescription_header(self, p, prescription_type, width, height):
+        """
+        Desenha o cabeçalho do PDF de acordo com o tipo de receita.
+        """
+        header_height = 50
+        margin = 50
+        
+        type_colors = {
+            Prescription.PrescriptionType.A1_AMARELA: colors.HexColor("#fdfd96"), # Amarelo pastel
+            Prescription.PrescriptionType.B1_AZUL: colors.HexColor("#add8e6"),      # Azul claro
+            Prescription.PrescriptionType.B2_AZUL: colors.HexColor("#add8e6"),      # Azul claro
+        }
+
+        bg_color = type_colors.get(prescription_type)
+
+        if bg_color:
+            p.setFillColor(bg_color)
+            p.rect(margin, height - margin - header_height, width - (2 * margin), header_height, fill=1, stroke=0)
+            p.setFillColor(colors.black)
+            title = "Notificação de Receita"
+        else:
+            title = "Receituário Médico"
+        
+        p.setFont("Helvetica-Bold", 16)
+        title_width = p.stringWidth(title, "Helvetica-Bold", 16)
+        p.drawString((width - title_width) / 2, height - margin - 35, title)
+
+        return height - margin - header_height - 20 # Retorna a nova posição Y inicial
+
+
     @action(detail=True, methods=['get'])
     def download_unsigned_pdf(self, request, pk=None):
         prescription = self.get_object()
@@ -237,44 +293,59 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
         p = canvas.Canvas(buffer, pagesize=letter)
         width, height = letter
 
-        # Título do Documento
-        p.setFont("Helvetica-Bold", 16)
-        p.drawString(100, height - 60, "Receituário Médico")
-        
-        # Linha separadora
-        p.line(100, height - 70, width - 100, height - 70)
+        # Desenha o cabeçalho e obtém a nova posição Y
+        current_y = self._draw_prescription_header(p, prescription.prescription_type, width, height)
 
         # Informações do Paciente e Médico
         p.setFont("Helvetica", 12)
-        p.drawString(100, height - 100, f"Paciente: {prescription.medical_record.patient.user.get_full_name()}")
-        p.drawString(100, height - 120, f"Médico: {prescription.signed_by.get_full_name() if prescription.signed_by else request.user.get_full_name()} (CRM: {prescription.signed_by.crm if prescription.signed_by else request.user.crm})")
-        p.drawString(100, height - 140, f"Data de Emissão: {timezone.now().strftime('%d/%m/%Y')}")
+        p.drawString(100, current_y, f"Paciente: {prescription.medical_record.patient.user.get_full_name()}")
+        current_y -= 20
+        p.drawString(100, current_y, f"Médico: {prescription.signed_by.get_full_name() if prescription.signed_by else request.user.get_full_name()} (CRM: {prescription.signed_by.crm if prescription.signed_by else request.user.crm})")
+        current_y -= 20
+        p.drawString(100, current_y, f"Data de Emissão: {timezone.now().strftime('%d/%m/%Y')}")
+        current_y -= 30
 
         # Informações da Receita Controlada (se aplicável)
         if prescription.prescription_type != Prescription.PrescriptionType.COMUM:
             p.setFont("Helvetica-Bold", 12)
-            p.drawString(100, height - 170, f"Tipo: {prescription.get_prescription_type_display()}")
+            p.drawString(100, current_y, f"Tipo: {prescription.get_prescription_type_display()}")
+            current_y -= 20
             if prescription.sncr_number:
-                p.drawString(100, height - 190, f"Numeração SNCR: {prescription.sncr_number}")
+                p.drawString(100, current_y, f"Numeração SNCR: {prescription.sncr_number}")
+                current_y -= 20
             
             p.setFont("Helvetica", 12)
-            p.drawString(100, height - 220, "Adquirente:")
-            p.drawString(120, height - 240, f"Nome: {prescription.acquirer_name or '____________________________'}")
-            p.drawString(120, height - 260, f"Documento: {prescription.acquirer_document or '____________________________'}")
+            p.drawString(100, current_y, "Adquirente:")
+            current_y -= 20
+            p.drawString(120, current_y, f"Nome: {prescription.acquirer_name or '____________________________'}")
+            current_y -= 20
+            p.drawString(120, current_y, f"Documento: {prescription.acquirer_document or '____________________________'}")
+            current_y -= 30
 
         # Descrição da Prescrição
         p.setFont("Helvetica-Bold", 12)
-        p.drawString(100, height - 300, "Prescrição:")
+        p.drawString(100, current_y, "Prescrição:")
+        current_y -= 20
         p.setFont("Helvetica", 12)
-        # Lógica simples para quebrar a linha (pode ser melhorada)
+
+        # Lógica para quebrar a linha
         from reportlab.lib.utils import simpleSplit
         lines = simpleSplit(prescription.description, 'Helvetica', 12, width - 200)
-        y = height - 320
         for line in lines:
-            p.drawString(120, y, line)
-            y -= 15
+            p.drawString(120, current_y, line)
+            current_y -= 15
+
+        # Nota sobre vias para receitas de controle especial brancas
+        if prescription.prescription_type in [
+            Prescription.PrescriptionType.C1_BRANCA,
+            Prescription.PrescriptionType.C2_BRANCA,
+            Prescription.PrescriptionType.ANTIMICROBIANO
+        ]:
+            p.setFont("Helvetica-Oblique", 9)
+            p.drawString(100, 140, "1ª Via - Retenção pela Farmácia / 2ª Via - Orientação ao Paciente")
 
         # Assinatura (espaço para assinatura digital/física)
+        p.setFont("Helvetica", 12)
         if prescription.is_signed and prescription.signed_at:
              p.drawString(100, 100, f"Documento assinado digitalmente por {prescription.signed_by.get_full_name()} em {prescription.signed_at.strftime('%d/%m/%Y %H:%M')}")
         else:
@@ -382,3 +453,51 @@ class ViaCepView(APIView):
     def get(self, request, cep):
         response = requests.get(f'https://viacep.com.br/ws/{cep}/json/')
         return Response(response.json())
+
+
+class SncrNumberViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para que os médicos gerenciem seus números de receita controlada (SNCR).
+    """
+    serializer_class = SncrNumberSerializer
+    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+
+    def get_queryset(self):
+        """
+        Retorna apenas os números SNCR pertencentes ao médico logado.
+        """
+        return SncrNumber.objects.filter(assigned_to=self.request.user).order_by('-created_at')
+
+    def create(self, request, *args, **kwargs):
+        """
+        Cria um ou mais números SNCR a partir de uma string com números
+        separados por quebra de linha.
+        """
+        numbers_str = request.data.get('number', '')
+        prescription_type = request.data.get('prescription_type') # Novo campo
+        if not numbers_str:
+            return Response({'detail': 'Nenhum número fornecido.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not prescription_type:
+            return Response({'detail': 'O tipo de receita é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        number_list = [num.strip() for num in numbers_str.splitlines() if num.strip()]
+        created_numbers = []
+        errors = []
+
+        for number in number_list:
+            serializer = self.get_serializer(data={'number': number, 'prescription_type': prescription_type})
+            if serializer.is_valid():
+                serializer.save(assigned_to=request.user)
+                created_numbers.append(serializer.data)
+            else:
+                errors.append({number: serializer.errors})
+        
+        if errors:
+            return Response({
+                'detail': 'Alguns números não puderam ser criados.',
+                'created': created_numbers,
+                'errors': errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(created_numbers, status=status.HTTP_201_CREATED)

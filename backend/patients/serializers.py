@@ -1,7 +1,16 @@
 from rest_framework import serializers
-from .models import Patient, Address, MedicalRecord, Prescription, Procedure
+from .models import Patient, Address, MedicalRecord, Prescription, Procedure, SncrNumber
 from users.serializers import UserSerializer, DoctorInfoSerializer
 from users.models import User
+
+class SncrNumberSerializer(serializers.ModelSerializer):
+    """
+    Serializer para gerenciar os números SNCR.
+    """
+    class Meta:
+        model = SncrNumber
+        fields = ['id', 'number', 'status', 'prescription_type', 'assigned_to', 'prescription', 'created_at', 'updated_at']
+        read_only_fields = ('status', 'assigned_to', 'prescription')
 
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:

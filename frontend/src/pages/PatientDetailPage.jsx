@@ -20,6 +20,16 @@ import RecordFormModal from '../components/RecordFormModal';
 import { useSnackbar } from 'notistack';
 import SigningInstructionsModal from '../components/SigningInstructionsModal';
 
+const prescriptionTypeLabels = {
+    COMUM: "Comum",
+    A1_AMARELA: "Notificação de Receita A1 (Amarela)",
+    B1_AZUL: "Notificação de Receita B1 (Azul)",
+    B2_AZUL: "Notificação de Receita B2 (Azul)",
+    C1_BRANCA: "Receita de Controle Especial (Branca - Duas Vias)",
+    C2_BRANCA: "Receita de Controle Especial (Branca - Retinoides)",
+    ANTIMICROBIANO: "Receita de Antimicrobiano (Branca - Duas Vias)"
+};
+
 function PatientDetailPage() {
     const { id } = useParams();
     const [patient, setPatient] = useState(null);
@@ -245,11 +255,28 @@ function PatientDetailPage() {
                                 {record.prescriptions.map(p => (
                                     <ListItem key={p.id} sx={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                                         <ListItemText 
-                                            primary={p.description} 
+                                            primary={
+                                                <Typography component="span" sx={{ fontWeight: 'bold' }}>
+                                                    {prescriptionTypeLabels[p.prescription_type] || 'Receita'}
+                                                </Typography>
+                                            }
                                             secondary={
-                                                p.is_signed 
-                                                ? `Assinado por ${p.signed_by?.full_name || 'Médico não identificado'} (CRM: ${p.signed_by?.crm || 'N/A'}) em ${new Date(p.signed_at).toLocaleString()}` 
-                                                : 'Aguardando assinatura'
+                                                <>
+                                                    <Typography component="span" variant="body2" color="text.primary">
+                                                        {p.description}
+                                                    </Typography>
+                                                    <br />
+                                                    {p.sncr_number && (
+                                                        <Typography component="span" variant="caption">
+                                                            Nº SNCR: {p.sncr_number} |{' '}
+                                                        </Typography>
+                                                    )}
+                                                    <Typography component="span" variant="caption">
+                                                        {p.is_signed 
+                                                            ? `Assinado por ${p.signed_by?.full_name || 'N/A'} em ${new Date(p.signed_at).toLocaleString()}` 
+                                                            : 'Aguardando assinatura'}
+                                                    </Typography>
+                                                </>
                                             }
                                         />
                                         {p.is_signed ? (
